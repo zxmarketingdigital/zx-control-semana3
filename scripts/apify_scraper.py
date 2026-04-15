@@ -136,7 +136,7 @@ def insert_lead(conn: sqlite3.Connection, lead: dict) -> bool:
 # Normalizacao e pontuacao
 # ---------------------------------------------------------------------------
 
-def normalize_phone(raw: str) -> str | None:
+def normalize_phone(raw: str):
     """Remove nao-digitos, garante codigo +55, 12-13 digitos total."""
     if not raw:
         return None
@@ -246,7 +246,7 @@ def map_item_to_lead(item: dict, segment: str, location: str) -> dict:
 # APIFY API
 # ---------------------------------------------------------------------------
 
-def _http_json(method: str, url: str, body: dict | None = None, token: str = "") -> dict:
+def _http_json(method: str, url: str, body=None, token: str = "") -> dict:
     """Faz requisicao HTTP e retorna JSON decodificado."""
     data = json.dumps(body).encode("utf-8") if body else None
     headers = {
@@ -260,6 +260,8 @@ def _http_json(method: str, url: str, body: dict | None = None, token: str = "")
     except urllib.error.HTTPError as exc:
         body_text = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"HTTP {exc.code} em {url}: {body_text}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Erro de conexao em {url}: {exc.reason}") from exc
 
 
 def start_apify_run(token: str, query: str, limit: int, logger: logging.Logger) -> str:
@@ -335,6 +337,9 @@ def sync_lead_to_supabase(lead: dict, supabase_url: str, service_key: str, logge
         body_text = exc.read().decode("utf-8", errors="replace")
         logger.warning("Supabase sync falhou para '%s': HTTP %d — %s",
                        lead.get("business_name"), exc.code, body_text[:200])
+    except urllib.error.URLError as exc:
+        logger.warning("Supabase sync timeout/conexao para '%s': %s",
+                       lead.get("business_name"), exc.reason)
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +422,7 @@ def main():
     # Processa e salva leads
     new_count  = 0
     dupe_count = 0
-    saved_leads: list[dict] = []
+    saved_leads = []
 
     for item in items:
         lead = map_item_to_lead(item, segment, location)
@@ -450,6 +455,61 @@ def main():
     conn.close()
     print_summary(len(items), new_count, dupe_count, saved_leads)
     logger.info("Concluido: %d novos, %d duplicados", new_count, dupe_count)
+
+
+# ---------------------------------------------------------------------------
+# Entrypoint publico para prospecting_engine.py
+# ---------------------------------------------------------------------------
+
+def run_search(config: dict, limit: int = 20, segment: str = "", location: str = "") -> int:
+    """Executa busca APIFY e salva leads no SQLite. Retorna contagem de novos leads."""
+    logger = setup_logging()
+
+    apify_token = config.get("apify_api_token", "")
+    if not apify_token:
+        logger.error("apify_api_token nao encontrado em config.json")
+        return 0
+
+    profile = load_profile()
+    segment  = segment  or profile.get("default_segment", "") or (profile.get("target_segments") or [""])[0]
+    location = location or profile.get("default_location", "") or profile.get("target_location", "")
+
+    if not segment or not location:
+        logger.error("segment e location sao obrigatorios para a busca")
+        return 0
+
+    query = f"{segment} em {location}"
+    conn  = init_db(PROSPECTS_DB_PATH)
+    supa_url = config.get("supabase_url", "")
+    supa_key = config.get("supabase_service_role_key", "")
+
+    try:
+        run_id     = start_apify_run(apify_token, query, limit, logger)
+        dataset_id = wait_for_run(apify_token, run_id, logger)
+        items      = fetch_dataset_items(apify_token, dataset_id, logger)
+    except (RuntimeError, TimeoutError) as exc:
+        logger.error("Falha na busca APIFY: %s", exc)
+        conn.close()
+        return 0
+
+    new_count  = 0
+    saved_leads = []
+
+    for item in items:
+        lead = map_item_to_lead(item, segment, location)
+        if not lead["phone"]:
+            continue
+        if phone_exists(conn, lead["phone"]):
+            continue
+        if insert_lead(conn, lead):
+            new_count += 1
+            saved_leads.append(lead)
+            if supa_url and supa_key:
+                sync_lead_to_supabase(lead, supa_url, supa_key, logger)
+
+    conn.close()
+    logger.info("run_search concluido: %d novos leads de '%s'", new_count, query)
+    return new_count
 
 
 if __name__ == "__main__":

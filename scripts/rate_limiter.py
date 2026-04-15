@@ -84,7 +84,8 @@ class FileLock:
             self._acquired = False
 
     def __enter__(self):
-        self.acquire()
+        if not self.acquire():
+            raise RuntimeError(f"Nao foi possivel adquirir lock: {self.lock_path}")
         return self
 
     def __exit__(self, *_):

@@ -16,6 +16,7 @@ Uso:
 import argparse
 import json
 import logging
+import os
 import random
 import sqlite3
 import sys
@@ -34,6 +35,7 @@ from lib import (
     PROSPECTS_DB_PATH,
     ensure_structure,
     load_config,
+    load_profile,
     mask_phone,
     now_iso,
     open_in_browser,
@@ -44,24 +46,34 @@ from copy_generator import get_email_subject, get_message
 # Importacoes opcionais (podem nao existir ainda)
 # ---------------------------------------------------------------------------
 try:
-    from apify_scraper import run_search as apify_run_search  # type: ignore
+    from apify_scraper import run_search as apify_run_search, init_db as apify_init_db  # type: ignore
 except ImportError:
     apify_run_search = None  # type: ignore
+    apify_init_db = None  # type: ignore
 
 try:
-    from rate_limiter import can_send, get_delay  # type: ignore
+    from rate_limiter import can_send, get_delay, record_send  # type: ignore
 except ImportError:
     # Fallback simples se rate_limiter ainda nao existir
-    def can_send(*_args, **_kwargs) -> bool:  # type: ignore
+    def can_send(*_args, **_kwargs):  # type: ignore
         return True
 
-    def get_delay(*_args, **_kwargs) -> float:  # type: ignore
+    def get_delay(*_args, **_kwargs):  # type: ignore
         return random.uniform(8, 20)
+
+    def record_send(*_args, **_kwargs):  # type: ignore
+        pass
 
 
 # ---------------------------------------------------------------------------
 # Configuracao de logging
 # ---------------------------------------------------------------------------
+
+def _chmod_owner_only(path: Path) -> None:
+    if os.name == "nt" or not path.exists():
+        return
+    os.chmod(path, 0o600)
+
 
 def _setup_logging() -> logging.Logger:
     ensure_structure()
@@ -72,6 +84,7 @@ def _setup_logging() -> logging.Logger:
     if not logger.handlers:
         # Handler para arquivo
         fh = logging.FileHandler(log_file, encoding="utf-8")
+        _chmod_owner_only(log_file)
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(logging.Formatter(
             "%(asctime)s [%(levelname)s] %(message)s",
@@ -87,7 +100,6 @@ def _setup_logging() -> logging.Logger:
 
     return logger
 
-
 LOG = _setup_logging()
 
 
@@ -96,48 +108,54 @@ LOG = _setup_logging()
 # ---------------------------------------------------------------------------
 
 def _get_conn() -> sqlite3.Connection:
+    """Retorna conexao com schema canônico do apify_scraper (se disponivel)."""
+    if apify_init_db is not None:
+        return apify_init_db(PROSPECTS_DB_PATH)
+    # Fallback: schema minimo caso apify_scraper nao esteja presente
     PROSPECTS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(PROSPECTS_DB_PATH))
     conn.row_factory = sqlite3.Row
-    return conn
-
-
-def _ensure_db(conn: sqlite3.Connection) -> None:
-    """Cria tabela de prospects se nao existir."""
     conn.execute("""
         CREATE TABLE IF NOT EXISTS prospects (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             business_name   TEXT NOT NULL,
-            phone           TEXT,
+            phone           TEXT UNIQUE,
             email           TEXT,
+            website         TEXT,
             segment         TEXT,
             location        TEXT,
+            rating          REAL,
+            reviews_count   INTEGER DEFAULT 0,
             score           REAL DEFAULT 0,
             temperature     TEXT DEFAULT 'frio',
             potential       TEXT DEFAULT '',
             current_step    INTEGER DEFAULT 0,
             responded       INTEGER DEFAULT 0,
             responded_at    TEXT,
-            status          TEXT DEFAULT 'novo',
-            price           TEXT DEFAULT 'R$3.990',
-            created_at      TEXT,
-            step1_sent_at   TEXT,
-            step2_sent_at   TEXT,
-            step3_sent_at   TEXT,
-            step4_sent_at   TEXT,
-            step5_sent_at   TEXT,
-            step6_sent_at   TEXT,
-            step7_sent_at   TEXT,
-            last_sent_at    TEXT,
+            status          TEXT DEFAULT 'Novo',
+            price           TEXT DEFAULT '',
+            contact_name    TEXT DEFAULT '',
+            created_at      TEXT DEFAULT (datetime('now')),
+            updated_at      TEXT DEFAULT (datetime('now')),
+            step1_sent_at   TEXT, step2_sent_at TEXT, step3_sent_at TEXT,
+            step4_sent_at   TEXT, step5_sent_at TEXT, step6_sent_at TEXT,
+            step7_sent_at   TEXT, last_sent_at  TEXT,
             channel         TEXT DEFAULT 'whatsapp',
             source          TEXT DEFAULT 'apify',
+            raw_data        TEXT DEFAULT '{}',
             notes           TEXT DEFAULT ''
         )
     """)
     conn.commit()
+    return conn
 
 
-def _get_pending_prospects(conn: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
+def _ensure_db(conn: sqlite3.Connection) -> None:
+    """Compatibilidade — schema ja criado em _get_conn."""
+    pass
+
+
+def _get_pending_prospects(conn: sqlite3.Connection, limit: int):
     """Retorna prospects pendentes de envio, priorizados por score."""
     return conn.execute("""
         SELECT * FROM prospects
@@ -149,7 +167,7 @@ def _get_pending_prospects(conn: sqlite3.Connection, limit: int) -> list[sqlite3
     """, (limit,)).fetchall()
 
 
-def _get_all_prospects(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def _get_all_prospects(conn: sqlite3.Connection):
     """Retorna todos os prospects."""
     return conn.execute("SELECT * FROM prospects ORDER BY score DESC").fetchall()
 
@@ -164,7 +182,7 @@ def _advance_step(conn: sqlite3.Connection, prospect_id: int, step: int) -> None
     ts = now_iso()
     conn.execute(
         f"UPDATE prospects SET {col} = ?, current_step = ?, last_sent_at = ?, status = ? WHERE id = ?",
-        (ts, step, ts, "em_sequencia", prospect_id),
+        (ts, step, ts, "Em Sequencia", prospect_id),
     )
     conn.commit()
 
@@ -172,7 +190,7 @@ def _advance_step(conn: sqlite3.Connection, prospect_id: int, step: int) -> None
 def _mark_responded(conn: sqlite3.Connection, phone: str) -> bool:
     """Marca um lead como respondido pelo telefone."""
     cur = conn.execute(
-        "UPDATE prospects SET responded = 1, responded_at = ?, status = 'respondeu' WHERE phone = ?",
+        "UPDATE prospects SET responded = 1, responded_at = ?, status = 'Respondeu' WHERE phone = ?",
         (now_iso(), phone),
     )
     conn.commit()
@@ -221,10 +239,10 @@ def _send_whatsapp(phone: str, message: str, config: dict, dry_run: bool) -> boo
         LOG.info("  [DRY-RUN] WhatsApp -> %s | %d chars", mask_phone(phone), len(message))
         return True
 
-    evo = config.get("evolution", {})
-    base_url = evo.get("url", "").rstrip("/")
-    instance = evo.get("instance", "")
-    api_key = evo.get("api_key", "")
+    # Suporta formato flat (evolution_api_url) e nested (evolution.url)
+    base_url = (config.get("evolution_api_url") or config.get("evolution", {}).get("url", "")).rstrip("/")
+    instance = config.get("evolution_instance") or config.get("evolution", {}).get("instance", "")
+    api_key = config.get("evolution_api_key") or config.get("evolution", {}).get("api_key", "")
 
     if not all([base_url, instance, api_key]):
         LOG.error("Configuracao Evolution API incompleta (url/instance/api_key)")
@@ -252,9 +270,9 @@ def _send_email(email: str, subject: str, body: str, config: dict, dry_run: bool
         LOG.info("  [DRY-RUN] Email -> %s | assunto: %s", email, subject)
         return True
 
-    resend = config.get("resend", {})
-    api_key = resend.get("api_key", "")
-    from_addr = resend.get("from", "ZX LAB <noreply@zxlab.com.br>")
+    # Suporta formato flat (resend_api_key) e nested (resend.api_key)
+    api_key = config.get("resend_api_key") or config.get("resend", {}).get("api_key", "")
+    from_addr = config.get("resend_from") or config.get("resend", {}).get("from", "ZX LAB <noreply@zxlab.com.br>")
 
     if not api_key:
         LOG.error("Configuracao Resend API incompleta (api_key)")
@@ -424,6 +442,7 @@ def action_send(config: dict, dry_run: bool, limit: int) -> None:
         if ok:
             if not dry_run:
                 _advance_step(conn, pid, next_step)
+                record_send(channel=channel)  # incrementa contador diario do rate limiter
             sent_count += 1
             LOG.info("  Enviado com sucesso. Step %d registrado.", next_step)
         else:
@@ -438,8 +457,117 @@ def action_send(config: dict, dry_run: bool, limit: int) -> None:
     LOG.info("=== Resultado: %d enviados | %d pulados ===", sent_count, skip_count)
 
 
+# ---------------------------------------------------------------------------
+# Dashboard HTML builder (dados embutidos inline — funciona em file://)
+# ---------------------------------------------------------------------------
+
+_DASHBOARD_TEMPLATE = """\
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="300">
+<title>Dashboard — __AGENCY_NAME__</title>
+<style>
+:root{--bg:#0a0a0f;--bg2:#111118;--bg3:#18181f;--border:#2a2a38;--accent:#8b5cf6;--accent2:#a855f7;--green:#10b981;--yellow:#f59e0b;--red:#ef4444;--text:#e2e8f0;--muted:#64748b;--card:#13131a}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;min-height:100vh;padding:24px}
+h1{font-size:20px;font-weight:800;color:white;margin-bottom:4px}
+.sub{font-size:13px;color:var(--muted);margin-bottom:24px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:28px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;border-top:3px solid var(--accent)}
+.card.green{border-top-color:var(--green)}.card.yellow{border-top-color:var(--yellow)}
+.clabel{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.cval{font-size:28px;font-weight:800;color:white;margin:6px 0 2px}
+table{width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+th{background:var(--bg3);padding:12px 16px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+td{padding:12px 16px;font-size:13px;border-top:1px solid var(--border)}
+.seg{background:rgba(139,92,246,.15);color:#c4b5fd;padding:2px 8px;border-radius:12px;font-size:11px}
+select.status-select{background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer}
+.temp-quente{background:rgba(16,185,129,.15);color:#6ee7b7;padding:2px 8px;border-radius:12px;font-size:11px}
+.temp-morno{background:rgba(245,158,11,.15);color:#fcd34d;padding:2px 8px;border-radius:12px;font-size:11px}
+.temp-frio{background:rgba(100,116,139,.15);color:#94a3b8;padding:2px 8px;border-radius:12px;font-size:11px}
+.score{font-weight:700}.score.high{color:#6ee7b7}.score.mid{color:#fcd34d}.score.low{color:#f87171}
+.step-badge{background:rgba(139,92,246,.2);color:#c4b5fd;padding:2px 8px;border-radius:8px;font-size:11px}
+</style>
+</head>
+<body>
+<h1>Painel de Prospeccao — __AGENCY_NAME__</h1>
+<p class="sub" id="subtitle">Atualizado em __UPDATED__</p>
+<div class="cards">
+  <div class="card"><div class="clabel">Total</div><div class="cval" id="c-total">-</div></div>
+  <div class="card green"><div class="clabel">Quentes</div><div class="cval" id="c-quente">-</div></div>
+  <div class="card yellow"><div class="clabel">Mornos</div><div class="cval" id="c-morno">-</div></div>
+  <div class="card"><div class="clabel">Frios</div><div class="cval" id="c-frio">-</div></div>
+  <div class="card"><div class="clabel">Em Sequencia</div><div class="cval" id="c-seq">-</div></div>
+  <div class="card green"><div class="clabel">Responderam</div><div class="cval" id="c-resp">-</div></div>
+</div>
+<table id="leads-table">
+  <thead><tr>
+    <th>#</th><th>Nome</th><th>Segmento</th><th>Telefone</th><th>Email</th>
+    <th>Score</th><th>Temperatura</th><th>Potencial</th><th>Step</th><th>Status</th>
+  </tr></thead>
+  <tbody id="leads-tbody"></tbody>
+</table>
+<script>
+const LEADS_DATA = __LEADS_JSON__;
+const STATUS_KEY = 'prospecting_status';
+const STATUS_OPTIONS = ['Novo','Em Sequencia','Respondeu','Sem Interesse','Convertido'];
+function loadStatuses(){try{return JSON.parse(localStorage.getItem(STATUS_KEY)||'{}');}catch(e){return{};}}
+function saveStatus(id,value){const all=loadStatuses();all[id]=value;localStorage.setItem(STATUS_KEY,JSON.stringify(all));}
+function maskPhone(p){if(!p)return'-';const s=String(p);return s.length>=10?s.slice(0,4)+'***'+s.slice(-3):s;}
+function scoreClass(s){return s>=7?'high':s>=4?'mid':'low';}
+function tempBadge(t){const v=(t||'').toLowerCase();if(v==='quente')return'<span class="temp-quente">Quente</span>';if(v==='morno')return'<span class="temp-morno">Morno</span>';return'<span class="temp-frio">Frio</span>';}
+(function(){
+  const leads=LEADS_DATA;
+  const statuses=loadStatuses();
+  const sorted=[...leads].sort((a,b)=>(b.score||0)-(a.score||0));
+  let totals={quente:0,morno:0,frio:0,seq:0,resp:0};
+  sorted.forEach(l=>{const t=(l.temperature||'').toLowerCase();if(t==='quente')totals.quente++;else if(t==='morno')totals.morno++;else totals.frio++;});
+  const tbody=document.getElementById('leads-tbody');
+  sorted.forEach((lead,idx)=>{
+    const id=lead.phone||idx;
+    const cur=statuses[id]||lead.status||'Novo';
+    if(cur==='Em Sequencia')totals.seq++;
+    if(cur==='Respondeu')totals.resp++;
+    const step=lead.current_step||0;
+    const opts=STATUS_OPTIONS.map(o=>`<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join('');
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${idx+1}</td><td style="font-weight:600">${lead.business_name||'-'}</td><td><span class="seg">${lead.segment||'-'}</span></td><td>${maskPhone(lead.phone)}</td><td style="color:var(--muted)">${lead.email||'-'}</td><td><span class="score ${scoreClass(lead.score||0)}">${lead.score||0}</span></td><td>${tempBadge(lead.temperature)}</td><td style="color:var(--muted);font-size:12px">${lead.potential||'-'}</td><td><span class="step-badge">${step}/7</span></td><td><select class="status-select" onchange="saveStatus('${id}',this.value)">${opts}</select></td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('c-total').textContent=sorted.length;
+  document.getElementById('c-quente').textContent=totals.quente;
+  document.getElementById('c-morno').textContent=totals.morno;
+  document.getElementById('c-frio').textContent=totals.frio;
+  document.getElementById('c-seq').textContent=totals.seq;
+  document.getElementById('c-resp').textContent=totals.resp;
+  document.getElementById('subtitle').textContent='Atualizado em __UPDATED__ — '+sorted.length+' leads';
+})();
+</script>
+</body>
+</html>"""
+
+
+def _build_dashboard_html(agency_name: str, leads_data: list) -> str:
+    """Gera HTML do dashboard com leads embutidos inline (sem fetch — funciona em file://)."""
+    from datetime import datetime as _dt
+    updated = _dt.now().strftime("%d/%m/%Y %H:%M")
+    leads_json = (
+        json.dumps(leads_data, ensure_ascii=False)
+        .replace("</", "<\\/")
+        .replace("<!--", "<\\!--")
+        .replace("]]>", "]\\]>")
+    )
+    html = _DASHBOARD_TEMPLATE.replace("__AGENCY_NAME__", agency_name)
+    html = html.replace("__UPDATED__", updated)
+    html = html.replace("__LEADS_JSON__", leads_json)
+    return html
+
+
 def action_dashboard(config: dict) -> None:
-    """Gera leads.json e abre o dashboard no browser."""
+    """Gera leads.json e HTML com dados embutidos inline; abre no browser."""
     LOG.info("=== GERANDO DASHBOARD ===")
 
     conn = _get_conn()
@@ -449,10 +577,7 @@ def action_dashboard(config: dict) -> None:
 
     leads = []
     for row in rows:
-        # Determina last_sent_at
         last_sent = row["last_sent_at"] or ""
-
-        # Determina status legivel
         status = row["status"] or "novo"
         if row["responded"]:
             status = "respondeu"
@@ -481,15 +606,20 @@ def action_dashboard(config: dict) -> None:
         json.dumps(leads, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    _chmod_owner_only(LEADS_JSON_PATH)
     LOG.info("leads.json gerado: %d prospects | %s", len(leads), LEADS_JSON_PATH)
 
-    if DASHBOARD_HTML_PATH.exists():
-        LOG.info("Abrindo dashboard no browser: %s", DASHBOARD_HTML_PATH)
-        open_in_browser(DASHBOARD_HTML_PATH)
-    else:
-        LOG.warning("Dashboard HTML nao encontrado em: %s", DASHBOARD_HTML_PATH)
-        LOG.info("Abrindo leads.json diretamente.")
-        open_in_browser(LEADS_JSON_PATH)
+    # Regenera HTML com dados embutidos (sem fetch — funciona em file://)
+    profile = load_profile()
+    agency_name = profile.get("agency_name", "Agencia IA")
+    html = _build_dashboard_html(agency_name, leads)
+    DASHBOARD_HTML_PATH.parent.mkdir(parents=True, exist_ok=True)
+    DASHBOARD_HTML_PATH.write_text(html, encoding="utf-8")
+    _chmod_owner_only(DASHBOARD_HTML_PATH)
+    LOG.info("Dashboard HTML regenerado: %d leads embutidos | %s", len(leads), DASHBOARD_HTML_PATH)
+
+    LOG.info("Abrindo dashboard no browser: %s", DASHBOARD_HTML_PATH)
+    open_in_browser(DASHBOARD_HTML_PATH)
 
 
 def action_mark_responded(phone: str) -> None:

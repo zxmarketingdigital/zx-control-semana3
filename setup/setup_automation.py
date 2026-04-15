@@ -74,6 +74,7 @@ DASHBOARD_LABEL = "com.operacao-ia.prospecting-dashboard-refresh"
 
 DAILY_PLIST_NAME = f"{DAILY_LABEL}.plist"
 DASHBOARD_PLIST_NAME = f"{DASHBOARD_LABEL}.plist"
+PYTHON_EXECUTABLE = sys.executable or shutil.which("python3") or "/usr/bin/python3"
 
 
 def _plist_daily():
@@ -88,7 +89,7 @@ def _plist_daily():
   <string>{DAILY_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/python3</string>
+    <string>{PYTHON_EXECUTABLE}</string>
     <string>{engine}</string>
     <string>--daily</string>
   </array>
@@ -117,7 +118,7 @@ def _plist_dashboard():
   <string>{DASHBOARD_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/python3</string>
+    <string>{PYTHON_EXECUTABLE}</string>
     <string>{engine}</string>
     <string>--dashboard</string>
   </array>
@@ -192,14 +193,23 @@ def setup_windows():
     ensure_structure()
 
     script_path = str(SCRIPTS_DIR / "prospecting_engine.py")
+    python_executable = sys.executable or shutil.which("python") or "python"
 
     print("  Registrando tarefa: prospeccao diaria (08:00)...")
-    cmd_daily = (
-        f'schtasks /create /tn "OperacaoIA-Prospecting-Daily" '
-        f'/tr "python \\"{script_path}\\" --daily" '
-        f'/sc daily /st 08:00 /f'
-    )
-    rc, out, err = run(cmd_daily, shell=True)
+    cmd_daily = [
+        "schtasks",
+        "/create",
+        "/tn",
+        "OperacaoIA-Prospecting-Daily",
+        "/tr",
+        subprocess.list2cmdline([python_executable, script_path, "--daily"]),
+        "/sc",
+        "daily",
+        "/st",
+        "08:00",
+        "/f",
+    ]
+    rc, out, err = run(cmd_daily)
     if rc == 0:
         print("  Tarefa diaria registrada: OK")
     else:
@@ -207,12 +217,20 @@ def setup_windows():
 
     print()
     print("  Registrando tarefa: dashboard refresh (a cada 30 min)...")
-    cmd_dash = (
-        f'schtasks /create /tn "OperacaoIA-Dashboard-Refresh" '
-        f'/tr "python \\"{script_path}\\" --dashboard" '
-        f'/sc minute /mo 30 /f'
-    )
-    rc, out, err = run(cmd_dash, shell=True)
+    cmd_dash = [
+        "schtasks",
+        "/create",
+        "/tn",
+        "OperacaoIA-Dashboard-Refresh",
+        "/tr",
+        subprocess.list2cmdline([python_executable, script_path, "--dashboard"]),
+        "/sc",
+        "minute",
+        "/mo",
+        "30",
+        "/f",
+    ]
+    rc, out, err = run(cmd_dash)
     if rc == 0:
         print("  Tarefa dashboard registrada: OK")
     else:
@@ -224,13 +242,13 @@ def setup_windows():
 
 def _verify_windows():
     print("  Verificando registro das tarefas...")
-    rc, out, err = run('schtasks /query /tn "OperacaoIA-Prospecting-Daily"', shell=True)
+    rc, out, err = run(["schtasks", "/query", "/tn", "OperacaoIA-Prospecting-Daily"])
     if rc == 0:
         print("  [registrado] OperacaoIA-Prospecting-Daily")
     else:
         print("  [aviso] OperacaoIA-Prospecting-Daily nao encontrada.")
 
-    rc, out, err = run('schtasks /query /tn "OperacaoIA-Dashboard-Refresh"', shell=True)
+    rc, out, err = run(["schtasks", "/query", "/tn", "OperacaoIA-Dashboard-Refresh"])
     if rc == 0:
         print("  [registrado] OperacaoIA-Dashboard-Refresh")
     else:

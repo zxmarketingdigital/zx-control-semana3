@@ -6,6 +6,7 @@ ZX Control Semana 3
 
 import getpass
 import json
+import os
 import shutil
 import sys
 import time
@@ -47,20 +48,29 @@ def ask(prompt, default=None):
     return answer
 
 
-def _json_get(url):
+def _json_get(url, headers=None):
     """GET request que retorna dict ou lanca excecao."""
-    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    req_headers = {"Accept": "application/json"}
+    if headers:
+        req_headers.update(headers)
+    req = urllib.request.Request(url, headers=req_headers)
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode())
 
 
-def _json_post(url, payload):
+def _json_post(url, payload, headers=None):
     """POST JSON, retorna dict."""
     data = json.dumps(payload).encode()
+    req_headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if headers:
+        req_headers.update(headers)
     req = urllib.request.Request(
         url,
         data=data,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers=req_headers,
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
@@ -72,9 +82,9 @@ def _json_post(url, payload):
 # ---------------------------------------------------------------------------
 
 def validate_token(token):
-    url = f"{APIFY_BASE}/acts?token={token}&limit=1"
+    url = f"{APIFY_BASE}/acts?limit=1"
     try:
-        data = _json_get(url)
+        data = _json_get(url, headers={"Authorization": f"Bearer {token}"})
         return "data" in data
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
@@ -92,7 +102,8 @@ def run_test_search(token, query):
     print(f"\n  Executando busca de teste: \"{query}\" (limite 5)...")
 
     # Iniciar run
-    run_url = f"{APIFY_BASE}/acts/{ACTOR_ID}/runs?token={token}"
+    auth_headers = {"Authorization": f"Bearer {token}"}
+    run_url = f"{APIFY_BASE}/acts/{ACTOR_ID}/runs"
     payload = {
         "searchStringsArray": [query],
         "maxCrawledPlacesPerSearch": 5,
@@ -100,7 +111,7 @@ def run_test_search(token, query):
         "countryCode": "br",
     }
     try:
-        run_data = _json_post(run_url, payload)
+        run_data = _json_post(run_url, payload, headers=auth_headers)
     except Exception as e:
         print(f"  Erro ao iniciar busca: {e}")
         return []
@@ -114,14 +125,14 @@ def run_test_search(token, query):
     print("  Aguardando conclusao ", end="", flush=True)
 
     # Polling ate SUCCEEDED (timeout 3 min)
-    status_url = f"{APIFY_BASE}/actor-runs/{run_id}?token={token}"
+    status_url = f"{APIFY_BASE}/actor-runs/{run_id}"
     deadline = time.time() + 180
     status = "RUNNING"
     while time.time() < deadline:
         time.sleep(5)
         print(".", end="", flush=True)
         try:
-            info = _json_get(status_url)
+            info = _json_get(status_url, headers=auth_headers)
             status = info.get("data", {}).get("status", "RUNNING")
         except Exception:
             continue
@@ -135,9 +146,9 @@ def run_test_search(token, query):
         return []
 
     # Buscar resultados
-    items_url = f"{APIFY_BASE}/actor-runs/{run_id}/dataset/items?token={token}"
+    items_url = f"{APIFY_BASE}/actor-runs/{run_id}/dataset/items"
     try:
-        items = _json_get(items_url)
+        items = _json_get(items_url, headers=auth_headers)
         # Apify retorna lista direta ou dict com "items"
         if isinstance(items, list):
             return items
@@ -260,6 +271,8 @@ def main():
     # Salvar token no config
     config["apify_api_token"] = token
     save_config(config)
+    if os.name != "nt" and CONFIG_PATH.exists():
+        os.chmod(CONFIG_PATH, 0o600)
     print("  apify_api_token salvo em config.json")
 
     # Instalar script

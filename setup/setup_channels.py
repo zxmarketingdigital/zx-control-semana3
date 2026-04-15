@@ -7,6 +7,7 @@ ZX Control Semana 3
 
 import getpass
 import json
+import os
 import shutil
 import sys
 import urllib.error
@@ -77,6 +78,50 @@ def test_evolution(url, key):
     return status == 200, body
 
 
+def _detect_instance(instances_body):
+    """Detecta ou solicita o nome da instancia Evolution API."""
+    if isinstance(instances_body, list):
+        instances = instances_body
+    elif isinstance(instances_body, dict):
+        raw = instances_body.get("data") or instances_body.get("instances") or []
+        instances = raw if isinstance(raw, list) else []
+    else:
+        instances = []
+
+    names = []
+    for inst in instances:
+        if isinstance(inst, dict):
+            name = (
+                inst.get("name")
+                or inst.get("instanceName")
+                or (inst.get("instance") or {}).get("instanceName", "")
+            )
+            if name:
+                names.append(str(name))
+
+    if not names:
+        print("  Nao foi possivel detectar instancias automaticamente.")
+        return ask("  Nome da instancia Evolution API (ex: andressa)").strip()
+
+    if len(names) == 1:
+        print(f"  Instancia detectada automaticamente: {names[0]}")
+        return names[0]
+
+    print("\n  Instancias disponíveis:")
+    for i, name in enumerate(names, 1):
+        print(f"    {i}. {name}")
+
+    while True:
+        choice = ask(f"  Numero da instancia (1-{len(names)})", "1")
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(names):
+                return names[idx]
+        except ValueError:
+            pass
+        print("  Opcao invalida. Tente novamente.")
+
+
 def setup_whatsapp(config):
     print("--- WhatsApp (Evolution API) ---\n")
 
@@ -91,6 +136,11 @@ def setup_whatsapp(config):
         ok, body = test_evolution(url, key)
         if ok:
             print("  WhatsApp conectado!\n")
+            if not config.get("evolution_instance"):
+                instance = _detect_instance(body)
+                if instance:
+                    config["evolution_instance"] = instance
+                    print(f"  Instancia selecionada: {instance}\n")
             return config
         else:
             print(f"  Falha na conexao: {body}")
@@ -118,6 +168,10 @@ def setup_whatsapp(config):
             print("  WhatsApp conectado!\n")
             config["evolution_api_url"] = url
             config["evolution_api_key"] = key
+            instance = _detect_instance(body)
+            if instance:
+                config["evolution_instance"] = instance
+                print(f"  Instancia selecionada: {instance}\n")
             return config
         else:
             print(f"  Falha na conexao: {body}")
@@ -208,22 +262,14 @@ def install_rate_limiter():
     if RATE_LIMITS_PATH.exists():
         print(f"  rate_limits.json ja existe em {RATE_LIMITS_PATH}")
     else:
-        today_iso = now_iso()
+        today_str = date.today().isoformat()
+        # Formato esperado pelo rate_limiter.py (_default_state)
         rate_limits = {
-            "whatsapp": {
-                "daily_limit": 30,
-                "interval_min": 60,
-                "interval_max": 120,
-                "sent_today": 0,
-                "last_reset": today_iso,
+            "channels": {
+                "whatsapp": {"limit": 30, "sent_today": 0, "date": today_str},
+                "email": {"limit": 200, "sent_today": 0, "date": today_str},
             },
-            "email": {
-                "daily_limit": 200,
-                "interval_min": 15,
-                "interval_max": 30,
-                "sent_today": 0,
-                "last_reset": today_iso,
-            },
+            "updated_at": today_str,
         }
         RATE_LIMITS_PATH.write_text(
             json.dumps(rate_limits, ensure_ascii=False, indent=2),
@@ -257,6 +303,8 @@ def main():
 
     # Salvar config atualizado
     save_config(config)
+    if os.name != "nt" and CONFIG_PATH.exists():
+        os.chmod(CONFIG_PATH, 0o600)
     print("  config.json atualizado.\n")
 
     # Instalar rate limiter
