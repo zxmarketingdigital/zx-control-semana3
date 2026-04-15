@@ -247,8 +247,10 @@ def check_checkpoints():
         data = json.loads(CHECKPOINT_PATH.read_text(encoding="utf-8"))
         steps = data.get("steps", {})
         done = [k for k, v in steps.items() if v.get("status") == "done"]
-        expected = [f"step_{i}" for i in range(1, 8)]
-        missing = [s for s in expected if s not in done]
+        # Checkpoints gravados com nome completo (ex: step_1_profile, step_2_apify)
+        # usa prefix matching para tolerar variacao de sufixo
+        expected_prefixes = [f"step_{i}_" for i in range(1, 8)]
+        missing = [p for p in expected_prefixes if not any(d.startswith(p) for d in done)]
         if not missing:
             return True, f"{len(done)} etapas marcadas como concluidas"
         return False, f"Etapas nao marcadas: {', '.join(missing)}"
@@ -261,13 +263,19 @@ def check_checkpoints():
 # ---------------------------------------------------------------------------
 
 def fix_rate_limits():
+    from datetime import date
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    today = date.today().isoformat()
+    # Formato esperado pelo rate_limiter.py (_default_state)
     default = {
-        "whatsapp": {"daily_limit": 50, "sent_today": 0, "last_reset": now_iso()},
-        "email": {"daily_limit": 100, "sent_today": 0, "last_reset": now_iso()},
+        "channels": {
+            "whatsapp": {"limit": 30, "sent_today": 0, "date": today},
+            "email": {"limit": 200, "sent_today": 0, "date": today},
+        },
+        "updated_at": today,
     }
     RATE_LIMITS_PATH.write_text(json.dumps(default, ensure_ascii=False, indent=2), encoding="utf-8")
-    return "rate_limits.json recriado com valores padrao"
+    return "rate_limits.json recriado com formato correto (channels wrapper)"
 
 
 def fix_leads_json():

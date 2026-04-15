@@ -29,7 +29,7 @@ from lib import PROSPECTING_TEMPLATES_DIR
 # Placeholders: {sender_name}, {agency_name}, {business_name}, {segment},
 #               {location}, {price}, {first_name}
 
-GENERIC_WPP: dict[int, str] = {
+GENERIC_WPP = {
     1: (
         "Oi! Aqui e o {sender_name}, da {agency_name} 👋\n\n"
         "Estava pesquisando {segment} em {location} e conheci o trabalho da {business_name}. "
@@ -83,7 +83,7 @@ GENERIC_WPP: dict[int, str] = {
     ),
 }
 
-GENERIC_EMAIL_SUBJECTS: dict[int, str] = {
+GENERIC_EMAIL_SUBJECTS = {
     1: "Como a {business_name} pode atrair mais clientes online",
     2: "78% dos seus clientes te pesquisam antes de ligar — voce aparece?",
     3: "Case: +3x agendamentos em 30 dias para {segment} em {location}",
@@ -93,7 +93,7 @@ GENERIC_EMAIL_SUBJECTS: dict[int, str] = {
     7: "Encerrando contato — mas deixo uma porta aberta",
 }
 
-GENERIC_EMAIL: dict[int, str] = {
+GENERIC_EMAIL = {
     1: (
         "Prezado(a) {first_name},\n\n"
         "Meu nome e {sender_name} e trabalho na {agency_name}, especializada em "
@@ -198,7 +198,7 @@ GENERIC_EMAIL: dict[int, str] = {
 # Funcoes publicas
 # ---------------------------------------------------------------------------
 
-def _load_segment_template(segment: str) -> dict | None:
+def _load_segment_template(segment: str):
     """Carrega template especifico do segmento, se existir."""
     path = PROSPECTING_TEMPLATES_DIR / f"{segment}.json"
     if not path.exists():
@@ -316,7 +316,7 @@ def generate_templates(segment: str, profile: dict) -> dict:
         **profile,
     }
 
-    structure: dict = {
+    structure = {
         "segment": segment,
         "generated_at": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
         "whatsapp": {},

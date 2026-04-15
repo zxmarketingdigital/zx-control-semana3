@@ -50,8 +50,25 @@ td{padding:12px 16px;font-size:13px;border-top:1px solid var(--border)}
 # HTML template
 # ---------------------------------------------------------------------------
 
-def build_html(agency_name):
+def build_html(agency_name, leads_data=None):
     updated = datetime.now().strftime("%d/%m/%Y %H:%M")
+    if leads_data is not None:
+        inline_json = json.dumps(leads_data, ensure_ascii=False)
+        data_script = f"const INLINE_LEADS = {inline_json};\n  renderLeads(INLINE_LEADS);"
+    else:
+        data_script = (
+            "fetch('leads.json')\n"
+            "  .then(r => r.json())\n"
+            "  .then(data => {\n"
+            "    const leads = Array.isArray(data) ? data : (data.leads || []);\n"
+            "    renderLeads(leads);\n"
+            "  })\n"
+            "  .catch(err => {\n"
+            "    document.getElementById('loading').style.display = 'none';\n"
+            "    document.getElementById('error-msg').style.display = '';\n"
+            "    console.error('Erro ao carregar leads.json:', err);\n"
+            "  });"
+        )
     return f"""\
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -152,7 +169,7 @@ function renderLeads(leads) {{
 
   let totals = {{quente:0, morno:0, frio:0, seq:0, resp:0}};
   sorted.forEach(lead => {{
-    const t = (lead.temperatura || '').toLowerCase();
+    const t = (lead.temperature || '').toLowerCase();
     if (t === 'quente') totals.quente++;
     else if (t === 'morno') totals.morno++;
     else totals.frio++;
@@ -165,7 +182,7 @@ function renderLeads(leads) {{
     if (currentStatus === 'Respondeu') totals.resp++;
 
     const stepTotal = lead.step_total || 7;
-    const stepCurrent = lead.step || 1;
+    const stepCurrent = lead.current_step || 0;
 
     const options = STATUS_OPTIONS.map(opt =>
       `<option value="${{opt}}"${{opt === currentStatus ? ' selected' : ''}}>${{opt}}</option>`
@@ -179,7 +196,7 @@ function renderLeads(leads) {{
       <td>${{maskPhone(lead.phone)}}</td>
       <td style="color:var(--muted)">${{lead.email || '-'}}</td>
       <td><span class="score ${{scoreClass(lead.score||0)}}">${{lead.score||0}}</span></td>
-      <td>${{tempBadge(lead.temperatura)}}</td>
+      <td>${{tempBadge(lead.temperature)}}</td>
       <td style="color:var(--muted);font-size:12px">${{lead.potential || '-'}}</td>
       <td><span class="step-badge">${{stepCurrent}}/${{stepTotal}}</span></td>
       <td>
@@ -204,17 +221,7 @@ function renderLeads(leads) {{
   document.getElementById('leads-table').style.display = '';
 }}
 
-fetch('leads.json')
-  .then(r => r.json())
-  .then(data => {{
-    const leads = Array.isArray(data) ? data : (data.leads || []);
-    renderLeads(leads);
-  }})
-  .catch(err => {{
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('error-msg').style.display = '';
-    console.error('Erro ao carregar leads.json:', err);
-  }});
+{data_script}
 </script>
 </body>
 </html>"""
@@ -233,9 +240,9 @@ SAMPLE_LEADS = [
         "phone": "5585991234567",
         "email": "contato@saudetotal.com.br",
         "score": 8,
-        "temperatura": "Quente",
+        "temperature": "quente",
         "potential": "Alta demanda por agendamento automatico",
-        "step": 2,
+        "current_step": 2,
         "step_total": 7,
         "status": "Em Sequencia",
     },
@@ -247,9 +254,9 @@ SAMPLE_LEADS = [
         "phone": "5585987654321",
         "email": "",
         "score": 6,
-        "temperatura": "Morno",
+        "temperature": "morno",
         "potential": "Pode automatizar pedidos e reservas",
-        "step": 1,
+        "current_step": 1,
         "step_total": 7,
         "status": "Novo",
     },
@@ -261,9 +268,9 @@ SAMPLE_LEADS = [
         "phone": "5585911223344",
         "email": "paulo@pinheiroadv.com.br",
         "score": 4,
-        "temperatura": "Frio",
+        "temperature": "frio",
         "potential": "Oportunidade em triagem de clientes",
-        "step": 1,
+        "current_step": 1,
         "step_total": 7,
         "status": "Novo",
     },
@@ -299,7 +306,7 @@ def main():
 
     # --- Gera HTML ---
     print("  Gerando HTML do dashboard...")
-    html_content = build_html(agency_name)
+    html_content = build_html(agency_name, SAMPLE_LEADS)
 
     # Salva no diretorio operacional
     DASHBOARD_HTML_PATH.write_text(html_content, encoding="utf-8")
@@ -336,7 +343,7 @@ def main():
     print("      Potencial, Step (x/7), Status editavel")
     print("    - Status salvo em localStorage (sem backend)")
     print("    - Auto-refresh a cada 5 minutos")
-    print("    - Dados carregados de leads.json via fetch()")
+    print("    - Dados embutidos diretamente no HTML (funciona em file://)")
     print()
 
     # --- Abre no browser ---
