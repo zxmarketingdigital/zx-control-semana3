@@ -1,4 +1,9 @@
 {
   "model": "sonnet",
-  "effort": "high"
+  "effort": "high",
+  "permissions": {
+    "allow": [
+      "Bash(find ~/zx-control-semana* ~/projetos/zx-control-semana* -type f -name \"*.html\")"
+    ]
+  }
 }
