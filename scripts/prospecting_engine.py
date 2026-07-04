@@ -272,7 +272,14 @@ def _send_email(email: str, subject: str, body: str, config: dict, dry_run: bool
 
     # Suporta formato flat (resend_api_key) e nested (resend.api_key)
     api_key = config.get("resend_api_key") or config.get("resend", {}).get("api_key", "")
-    from_addr = config.get("resend_from") or config.get("resend", {}).get("from", "ZX LAB <noreply@zxlab.com.br>")
+    # Fallback = remetente de teste da Resend (unico from liberado SEM verificar dominio).
+    # NUNCA usar um dominio de terceiros aqui: a Resend rejeita com 403 se o dominio
+    # nao estiver verificado na conta do proprio aluno.
+    from_addr = (
+        config.get("resend_from")
+        or config.get("resend", {}).get("from")
+        or "onboarding@resend.dev"
+    )
 
     if not api_key:
         LOG.error("Configuracao Resend API incompleta (api_key)")
@@ -295,7 +302,16 @@ def _send_email(email: str, subject: str, body: str, config: dict, dry_run: bool
         LOG.info("  Email enviado -> %s", email)
         return True
     else:
-        LOG.error("  Falha Email -> %s | status=%s | resp=%s", email, status, str(resp)[:200])
+        if status == 403 and "@" in from_addr and not from_addr.endswith("@resend.dev"):
+            LOG.error(
+                "  Falha Email -> %s | 403: o remetente '%s' usa um dominio nao "
+                "verificado na sua conta Resend. Verifique seu dominio em "
+                "resend.com/domains ou use 'onboarding@resend.dev' como remetente "
+                "(campo resend_from no config.json).",
+                email, from_addr,
+            )
+        else:
+            LOG.error("  Falha Email -> %s | status=%s | resp=%s", email, status, str(resp)[:200])
         return False
 
 

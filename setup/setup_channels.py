@@ -194,6 +194,32 @@ def test_resend(key):
     return status == 200, body
 
 
+def _prompt_resend_from(config):
+    """Coleta e salva o remetente verificado do aluno (resend_from).
+
+    A Resend rejeita (403) qualquer envio de dominio nao verificado. Se o aluno
+    ainda nao tem dominio proprio verificado, usamos 'onboarding@resend.dev' —
+    o unico remetente que a Resend libera sem verificacao. NUNCA um dominio de
+    terceiros.
+    """
+    current = config.get("resend_from", "")
+    if current:
+        print(f"  Remetente de email atual: {current}\n")
+        return config
+
+    print("  Qual remetente aparecera nos seus emails?")
+    print("  - Se voce ja verificou um dominio proprio na Resend, use algo como")
+    print("    'contato@seudominio.com' ou 'Seu Nome <contato@seudominio.com>'.")
+    print("  - Se ainda NAO tem dominio verificado, deixe em branco para usar")
+    print("    'onboarding@resend.dev' (remetente de teste liberado pela Resend).\n")
+    from_addr = ask("  Remetente verificado (Enter = onboarding@resend.dev)").strip()
+    if not from_addr:
+        from_addr = "onboarding@resend.dev"
+    config["resend_from"] = from_addr
+    print(f"  Remetente configurado: {from_addr}\n")
+    return config
+
+
 def setup_email(config):
     print("--- Email (Resend) ---\n")
 
@@ -205,7 +231,7 @@ def setup_email(config):
         ok, body = test_resend(key)
         if ok:
             print("  Email conectado!\n")
-            return config
+            return _prompt_resend_from(config)
         else:
             print(f"  Falha na conexao: {body}")
             reconfig = ask("  Deseja reconfigurar? (s/n)", "s").lower()
@@ -230,7 +256,7 @@ def setup_email(config):
         if ok:
             print("  Email conectado!\n")
             config["resend_api_key"] = key
-            return config
+            return _prompt_resend_from(config)
         else:
             print(f"  Falha na conexao: {body}")
             retry = ask("  Tentar novamente? (s/n)", "s").lower()

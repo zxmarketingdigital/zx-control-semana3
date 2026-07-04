@@ -360,8 +360,8 @@ def main():
 
     print("  [OK] Etapa 5 concluida!")
     print()
-    print("  Proximo passo: Etapa 6 — Rastreamento de Respostas")
-    print("  Execute: python3 setup/setup_tracking.py")
+    print("  Proximo passo: Etapa 6 — Motor de Campanhas")
+    print("  Execute: python3 setup/setup_campaign_engine.py")
     print()
 
 

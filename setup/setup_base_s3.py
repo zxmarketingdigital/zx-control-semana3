@@ -82,13 +82,14 @@ def print_plan():
     steps = [
         ("Etapa 0", "Base S3         — Ambiente e estrutura de diretorios (este script)"),
         ("Etapa 1", "Perfil          — Perfil de prospeccao e cliente ideal"),
-        ("Etapa 2", "Templates       — Mensagens de abordagem WhatsApp e Email"),
-        ("Etapa 3", "Busca de Leads  — Integracao com fontes de captacao"),
-        ("Etapa 4", "Rate Limiter    — Protecao contra bloqueio Z-API"),
-        ("Etapa 5", "Dispatcher      — Agendamento e disparo automatico"),
-        ("Etapa 6", "Rastreamento    — Respostas, status e pipeline"),
-        ("Etapa 7", "Dashboard       — Painel visual de campanha"),
-        ("Etapa 8", "Automacao Total — Cron diario e modo autonomo"),
+        ("Etapa 2", "APIFY           — Busca de leads na internet (Google Maps)"),
+        ("Etapa 3", "Canais          — WhatsApp (Evolution) + Email (Resend) + rate limiter"),
+        ("Etapa 4", "Copy            — Mensagens personalizadas por segmento"),
+        ("Etapa 5", "Dashboard       — Painel visual de prospeccao"),
+        ("Etapa 6", "Motor           — Motor de campanhas (disparo automatizado)"),
+        ("Etapa 7", "Automacao       — Automacao diaria + skills Claude Code"),
+        ("Etapa 8", "Auditoria       — Revisao tecnica automatica do sistema"),
+        ("Etapa 9", "Finalizacao     — Primeira busca real e encerramento"),
     ]
     print()
     print("  Plano completo — 9 etapas:")

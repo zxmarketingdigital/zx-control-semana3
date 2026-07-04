@@ -239,8 +239,8 @@ def main():
 
     print("  [OK] Etapa 1 concluida!")
     print()
-    print("  Proximo passo: Etapa 2 — Templates de Abordagem")
-    print("  Execute: python3 setup/setup_templates.py")
+    print("  Proximo passo: Etapa 2 — Busca de Leads (APIFY)")
+    print("  Execute: python3 setup/setup_apify.py")
     print()
 
 
