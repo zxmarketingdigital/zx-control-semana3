@@ -20,6 +20,7 @@ from lib import (
     CONFIG_PATH,
     PROSPECTS_DB_PATH,
     DASHBOARD_HTML_PATH,
+    bump_phase,
     ensure_structure,
     load_config,
     save_config,
@@ -91,13 +92,15 @@ def update_config_phase():
     """Atualiza config.json com fase 3 completa."""
     try:
         config = load_config()
-        config["phase_completed"] = 3
-        config["week3"] = {
-            "completed": True,
-            "completed_at": now_iso(),
-        }
+        bump_phase(config, 3)  # nunca regride (quem ja tem fase maior, mantem)
+        week3 = config.get("week3")
+        if not isinstance(week3, dict):
+            week3 = {}
+        week3["completed"] = True
+        week3["completed_at"] = now_iso()
+        config["week3"] = week3
         save_config(config)
-        print("  [OK] config.json atualizado: phase_completed=3")
+        print(f"  [OK] config.json atualizado: phase_completed={config['phase_completed']}")
         return True
     except FileNotFoundError:
         print("  [AVISO] config.json nao encontrado. Nao foi possivel atualizar fase.")

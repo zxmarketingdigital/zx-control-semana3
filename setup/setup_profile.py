@@ -206,12 +206,7 @@ def main():
     print()
 
     # Verifica config
-    try:
-        config = load_config()
-    except FileNotFoundError:
-        print("  AVISO: config.json nao encontrado.")
-        print("  Execute primeiro: python3 setup/setup_base_s3.py")
-        sys.exit(1)
+    config = load_config()  # cria o config.json minimo se nao existir
 
     # Loop de questionario com confirmacao
     while True:

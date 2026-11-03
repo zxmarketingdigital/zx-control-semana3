@@ -18,7 +18,7 @@
 ## Onda 1 — Fundacao (sequencial, Opus direto)
 
 **Arquivos:**
-1. `CLAUDE.md` — Instrucoes completas do instrutor (seguir padrao da Semana 2)
+1. `CLAUDE.md` — Instrucoes completas do instrutor (seguir o padrao dos setups anteriores)
 2. `scripts/lib.py` — Extend da Semana 2 com novos paths de prospeccao
 3. `sql/002_prospects.sql` — Schema Supabase
 

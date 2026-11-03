@@ -2,6 +2,7 @@
 """
 Etapa 0 — Base Semana 3
 Boas-vindas, diagnostico do ambiente e criacao da estrutura de diretorios.
+Nao exige setup anterior: cria o config.json minimo se ele nao existir.
 """
 
 import json
@@ -38,19 +39,19 @@ def ask(prompt, secret=False):
         sys.exit(0)
 
 
-def check_phase(config):
-    """Verifica se Semanas 1 e 2 foram concluidas."""
-    phase = config.get("phase_completed", 0)
-    if phase < 2:
-        print()
-        print("  ATENCAO: Semanas 1 e 2 nao foram concluidas.")
-        print(f"  phase_completed atual: {phase} (esperado: >= 2)")
-        print()
-        print("  Conclua as semanas anteriores antes de continuar:")
-        print("    Semana 1: ~/zx-control-semana1/")
-        print("    Semana 2: ~/zx-control-semana2/")
-        print()
-        sys.exit(1)
+def report_existing_install(config):
+    """Informativo: mostra o que ja existe de uma instalacao anterior. Nunca bloqueia."""
+    reaproveitados = [
+        label for key, label in (
+            ("evolution_api_key", "WhatsApp (Evolution)"),
+            ("resend_api_key", "Email (Resend)"),
+            ("supabase_url", "Supabase"),
+        ) if config.get(key)
+    ]
+    if reaproveitados:
+        print("  [OK] Configuracoes existentes que serao reaproveitadas: " + ", ".join(reaproveitados))
+    else:
+        print("  [OK] Nenhuma configuracao anterior encontrada — o que for preciso sera configurado nas proximas etapas.")
 
 
 def detect_scheduler():
@@ -126,18 +127,11 @@ def main():
     print("  WhatsApp e Email, rastreamento de respostas e dashboard.")
     print()
 
-    # --- Carrega config e valida fases anteriores ---
-    print("  Verificando pre-requisitos...")
-    try:
-        config = load_config()
-    except FileNotFoundError:
-        print()
-        print("  ERRO: config.json nao encontrado.")
-        print("  Execute primeiro o setup das Semanas 1 e 2.")
-        sys.exit(1)
-
-    check_phase(config)
-    print("  [OK] Semanas 1 e 2 concluidas.")
+    # --- Carrega (ou cria) o config.json: este setup nao exige setup anterior ---
+    print("  Preparando a base (config.json)...")
+    ensure_structure()
+    config = load_config()  # cria o minimo se nao existir; backup + recria se estiver corrompido
+    report_existing_install(config)
     print()
 
     # --- Detecta e salva plataforma ---

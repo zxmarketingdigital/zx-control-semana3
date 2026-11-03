@@ -723,12 +723,7 @@ def main() -> None:
     ensure_structure()
 
     # Carrega config
-    try:
-        config = load_config()
-    except FileNotFoundError as exc:
-        LOG.error("%s", exc)
-        LOG.error("Execute primeiro: python3 setup_config.py")
-        sys.exit(1)
+    config = load_config()  # cria o config.json minimo se nao existir
 
     # Roteia para a acao correta
     if args.search:

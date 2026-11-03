@@ -377,11 +377,7 @@ def main():
     logger = setup_logging()
 
     # Config
-    try:
-        config = load_config()
-    except FileNotFoundError as exc:
-        logger.error(str(exc))
-        sys.exit(1)
+    config = load_config()  # cria o config.json minimo se nao existir
 
     apify_token = config.get("apify_api_token", "")
     if not apify_token:

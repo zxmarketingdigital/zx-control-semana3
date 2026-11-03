@@ -45,7 +45,7 @@ Voce e o instrutor de setup da Semana 3. Seu papel e levar o aluno de uma operac
 Verificacao inicial do ambiente e criacao das pastas necessarias para a Semana 3.
 
 ### Para que serve
-Garante que a base das Semanas 1 e 2 esta presente e que tudo esta no lugar.
+Cria a base necessaria (pastas e config.json minimo) e aproveita o que ja existir de uma instalacao anterior. Este setup NAO exige nenhum setup anterior: nunca mande o aluno instalar outro setup.
 
 ### Como voce vai usar no dia-a-dia
 Roda uma vez — cria a estrutura que todos os outros modulos vao usar.
@@ -57,7 +57,7 @@ Roda uma vez — cria a estrutura que todos os outros modulos vao usar.
 Execute: `python3 setup/setup_base_s3.py`
 
 O script vai:
-- Verificar se `config.json` tem `phase_completed >= 2` (Semanas 1+2)
+- Criar `config.json` minimo se nao existir (se existir, reaproveita sem apagar nada; se estiver corrompido, guarda backup e recria)
 - Detectar o sistema operacional (macOS/Windows/Linux)
 - Verificar Python no PATH
 - Criar subpastas para prospeccao
@@ -422,7 +422,7 @@ Nos vemos na Semana 4!
 - **Produto:** ZX Control — Mentoria de 30 dias
 - **Publico:** Infoprodutores e agencias que usam WhatsApp e email para comunicacao comercial
 - **Objetivo Semana 3:** Transformar operacao passiva em ativa com prospeccao automatizada
-- **Pre-requisito:** Semanas 1 e 2 concluidas (config.json com phase_completed >= 2)
+- **Pre-requisito:** nenhum setup anterior. Se o aluno ja tem outro setup instalado (WhatsApp/Evolution, Resend, Supabase), aproveite o que estiver valido; se nao tiver, as Etapas 2 e 3 configuram APIFY, WhatsApp e Email aqui mesmo. Nunca peca para instalar outro setup antes.
 - **Pasta base do aluno:** `~/.operacao-ia/`
 - **Pasta deste repositorio:** `~/zx-control-semana3/` (ou onde o aluno clonou)
 - **APIFY:** Token no config.json apos Etapa 2

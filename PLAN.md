@@ -18,13 +18,13 @@ A Semana 3 transforma a operacao do aluno de **passiva** (espera leads chegarem)
 - Sequencia de follow-up de 7 dias personalizada por segmento
 - Automacao diaria que roda de manha sozinha (busca + dispara)
 
-**Pre-requisitos:** Semana 1 e 2 concluidas (config.json com phase_completed >= 2)
+**Pre-requisitos:** Não exige setup anterior — se você já tem outro setup instalado, ele aproveita o que estiver válido. O config.json minimo e criado na Etapa 0.
 
 ---
 
 ## Regras de Comportamento do Instrutor
 
-Mesmo padrao das Semanas 1 e 2:
+Mesmo padrao dos setups anteriores:
 
 1. **Execute voce mesmo** — nunca peca para o aluno copiar ou colar comandos
 2. **Uma etapa por vez** — confirme e aguarde o aluno antes de avancar
@@ -79,7 +79,7 @@ elif PLATFORM == "Darwin":
 Verificacao inicial do ambiente e criacao das pastas necessarias para a Semana 3.
 
 ### Para que serve
-Garante que a base das Semanas 1 e 2 esta presente e que tudo esta no lugar.
+Cria a base necessaria (pastas e config.json minimo) e aproveita o que ja existir de uma instalacao anterior.
 
 ### Como vai usar no dia-a-dia
 Roda uma vez — cria a estrutura que todos os outros modulos vao usar.
@@ -87,7 +87,7 @@ Roda uma vez — cria a estrutura que todos os outros modulos vao usar.
 ### Script: `setup/setup_base_s3.py`
 
 O script deve:
-- Verificar `config.json` → `phase_completed >= 2` (Semanas 1+2)
+- Criar `config.json` minimo se nao existir (backup + recria se estiver corrompido); nunca exige setup anterior
 - Detectar OS (macOS/Windows/Linux) e salvar `platform` no config.json
 - Verificar Python no PATH
 - Verificar se `schtasks` (Windows) ou `launchctl` (macOS) esta disponivel
@@ -239,12 +239,12 @@ Funciona em segundo plano — depois de configurado, os disparos usam esses cana
 Fluxo condicional:
 
 **WhatsApp (Evolution API):**
-- Verifica se `evolution_api_url` e `evolution_api_key` existem no config.json (Semana 1)
+- Verifica se `evolution_api_url` e `evolution_api_key` existem no config.json (aproveitados de uma instalacao anterior, se houver)
 - Se sim: testa conexao e confirma
 - Se nao: configura do zero (pede URL, API Key, cria instancia, conecta QR Code)
 
 **Email (Resend):**
-- Verifica se `resend_api_key` existe no config.json (Semana 1)
+- Verifica se `resend_api_key` existe no config.json (aproveitado de uma instalacao anterior, se houver)
 - Se sim: testa enviando email de verificacao
 - Se nao: configura do zero (pede API Key, configura dominio ou usa sandbox)
 
@@ -585,9 +585,9 @@ CREATE TRIGGER set_updated_at_prospects
 | Servico | Custo | Para que |
 |---------|-------|----------|
 | APIFY | Free tier ~5$/mes (~1000 leads/mes) | Scraping Google Maps |
-| Evolution API | Ja instalado (Semana 1) ou instala Etapa 3 | WhatsApp |
+| Evolution API | Ja instalado ou configurado na Etapa 3 | WhatsApp |
 | Resend | Free 100 emails/dia | Email |
-| Supabase | Free tier (Semana 2) | Banco de dados nuvem |
+| Supabase | Free tier (opcional) | Banco de dados nuvem |
 
 ---
 

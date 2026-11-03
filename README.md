@@ -7,8 +7,8 @@ integrado com APIFY, Evolution API e Resend.
 
 ## Pre-requisitos
 
-- Semanas 1 e 2 do ZX Control concluidas
-- `~/.operacao-ia/config/config.json` configurado
+- Não exige setup anterior — se você já tem outro setup instalado, ele aproveita o que estiver válido.
+- O `~/.operacao-ia/config/config.json` minimo e criado automaticamente na Etapa 0
 - Chaves de API: APIFY, Evolution API (WhatsApp), Resend (email)
 
 ---
