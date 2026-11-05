@@ -636,7 +636,7 @@ zx-control-semana3/
 ## Modelo de Referencia
 
 O dashboard e motor de campanha devem seguir o padrao do sistema de prospeccao
-criado em `~/.openclaw/workspace/scripts/zx_prospecting_campaign.py`:
+criado pela ZX LAB (sistema de prospeccao interno):
 - Mesmo DARK_CSS (dark theme roxo)
 - Mesma logica de sequencia 7 dias
 - Mesmo estilo de badges de status

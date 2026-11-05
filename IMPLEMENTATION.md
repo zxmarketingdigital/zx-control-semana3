@@ -82,7 +82,7 @@ Referencia para rate_limiter: Python puro, JSON file-based
 - `scripts/prospecting_engine.py`
 - `scripts/copy_generator.py`
 
-Referencia: `~/.openclaw/workspace/scripts/zx_prospecting_campaign.py`
+Referencia: o sistema de prospeccao interno da ZX LAB.
 Mesmo padrao de CLI args, mesma logica de steps, mesmo delay randomizado.
 
 ### Agent 3: Dashboard + Skills
@@ -92,7 +92,7 @@ Mesmo padrao de CLI args, mesma logica de steps, mesmo delay randomizado.
 - `skills/pausar-prospeccao/SKILL.md`
 - `skills/retomar-prospeccao/SKILL.md`
 
-Referencia dashboard: `~/.openclaw/workspace/dashboards/prospecting-dashboard.html`
+Referencia dashboard: o dashboard de prospeccao interno da ZX LAB.
 Mesmo DARK_CSS, adicionar colunas Score/Temperatura/Potencial + dropdown Status com localStorage.
 
 Skills devem seguir formato: model + effort no frontmatter (ver regras em ~/.claude/rules/skill-creation-rules.md)
